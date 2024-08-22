@@ -3,6 +3,7 @@ openai
 pandas
 matplotlib
 pandas_ta
+numoy
 streamlit
 pandas
 pandas_ta
