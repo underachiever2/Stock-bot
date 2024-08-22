@@ -3,7 +3,8 @@ openai
 pandas
 matplotlib
 pandas_ta
-numpy
+pandas_ta==0.3.14b
+numpy==1.21.0
 streamlit
 pandas
 pandas_ta
