@@ -3,7 +3,7 @@ openai
 pandas
 matplotlib
 pandas_ta==0.3.14b
-numpy==1.21.0
+numpy
 requests
 toml
 setuptools
