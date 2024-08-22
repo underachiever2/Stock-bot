@@ -2,7 +2,6 @@ streamlit
 openai
 pandas
 matplotlib
-distutils
 pandas_ta==0.3.14b
 numpy==1.21.0
 requests
