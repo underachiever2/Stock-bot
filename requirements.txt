@@ -7,4 +7,6 @@ numpy
 requests
 toml
 setuptools
+git+https://github.com/twopirllc/pandas-ta.git@main
+numpy==1.19.5
 
