@@ -3,3 +3,9 @@ openai
 pandas
 matplotlib
 pandas_ta
+streamlit
+pandas
+pandas_ta
+requests
+openai
+toml
