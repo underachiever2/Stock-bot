@@ -9,12 +9,20 @@ import openai  # Import the openai module
 from datetime import datetime, timedelta
 from PIL import Image
 
-# Load Theodora's avatar
-avatar = Image.open(avatar = Image.open("Theodora-avatar.webp")
 
-# Display the avatar at the top of the page
+
+# Apply the custom CSS for background color and styling
+with open(".streamlit/style.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
+# Load Theodora avatar
+avatar = Image.open("Theodora-avatar.webp")
 st.image(avatar, caption="Theodora - Your Trading Assistant", width=150)
 
+# Display Theodora's avatar in the center
+st.markdown("<div style='text-align: center;'><img src='Theodora-avatar.webp' width='200'></div>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>Theodora - Your Trading Assistant</h3>", unsafe_allow_html=True)
 
 # Load the secrets from the .streamlit/secrets.toml file
 try:

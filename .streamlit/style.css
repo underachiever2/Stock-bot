@@ -1,0 +1,28 @@
+nano .streamlit/style.css
+/* .streamlit/style.css */
+
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+}
+
+div.stButton > button {
+    background-color: #444444;
+    color: #e0e0e0;
+    border: 1px solid #888888;
+}
+
+div.stButton > button:hover {
+    background-color: #555555;
+    color: #ffffff;
+}
+
+.stAlert {
+    background-color: #1e1e1e;
+    border-left: 5px solid #888888;
+}
+
