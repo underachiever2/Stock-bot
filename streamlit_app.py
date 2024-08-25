@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 from PIL import Image
 
 # Load Theodora's avatar
-avatar = Image.open("theodora_avatar.png")
+avatar = Image.open(avatar = Image.open("Theodora-avatar.webp")
 
 # Display the avatar at the top of the page
-st.image(avatar, caption="Theodora - Your Trading Assistant", use_column_width=True)
+st.image(avatar, caption="Theodora - Your Trading Assistant", width=150)
 
 
 # Load the secrets from the .streamlit/secrets.toml file
