@@ -6,12 +6,23 @@ import pandas_ta as ta
 import matplotlib.pyplot as plt
 import random  # Import the random module
 import openai  # Import the openai module
+from datetime import datetime, timedelta
+from PIL import Image
+
+# Load Theodora's avatar
+avatar = Image.open("theodora_avatar.png")
+
+# Display the avatar at the top of the page
+st.image(avatar, caption="Theodora - Your Trading Assistant", use_column_width=True)
+
 
 # Load the secrets from the .streamlit/secrets.toml file
 try:
     secrets = toml.load('.streamlit/secrets.toml')
     marketstack_api_key = secrets['marketstack']['api_key']
     openai_api_key = secrets['openai']['api_key']
+    finhub_api_key = secrets.get('finhub', {}).get('api_key', None)
+    newsapi_api_key = secrets.get('newsapi', {}).get('api_key', None)
 except FileNotFoundError:
     st.error("The secrets.toml file was not found.")
     st.stop()
@@ -26,6 +37,7 @@ openai.api_key = openai_api_key
 st.title("Welcome, I'm Theodora, your trading assistant.")
 
 # Function to fetch stock tickers with details
+@st.cache_data(show_spinner=False)
 def fetch_stock_tickers():
     base_url = 'http://api.marketstack.com/v1/'
     endpoint = 'tickers'
@@ -45,6 +57,7 @@ def fetch_stock_tickers():
         return []
 
 # Function to fetch market data from MarketStack API for multiple symbols in batches
+@st.cache_data(show_spinner=False)
 def fetch_market_data_batch(symbols, batch_size=50):
     base_url = 'http://api.marketstack.com/v1/'
     endpoint = 'eod'  # End of day data
@@ -90,17 +103,18 @@ def filter_stocks_by_price_and_volume(tickers, min_price, max_price, min_volume)
 
 # Function to calculate technical indicators
 def calculate_indicators(df):
-    df['RSI'] = ta.rsi(df['close'], length=14)
-    macd = ta.macd(df['close'])
-    df['MACD'] = macd['MACD_12_26_9']
-    df['MACD_signal'] = macd['MACDs_12_26_9']
-    df['MACD_hist'] = macd['MACDh_12_26_9']
-    
-    # Calculate Bollinger Bands and assign each column to the DataFrame
-    bb = ta.bbands(df['close'], length=20)
-    df['BB_upper'] = bb['BBU_20_2.0']
-    df['BB_middle'] = bb['BBM_20_2.0']
-    df['BB_lower'] = bb['BBL_20_2.0']
+    if 'close' in df.columns:
+        df['RSI'] = ta.rsi(df['close'], length=14)
+        macd = ta.macd(df['close'])
+        df['MACD'] = macd['MACD_12_26_9']
+        df['MACD_signal'] = macd['MACDs_12_26_9']
+        df['MACD_hist'] = macd['MACDh_12_26_9']
+
+        # Calculate Bollinger Bands and assign each column to the DataFrame
+        bb = ta.bbands(df['close'], length=20)
+        df['BB_upper'] = bb['BBU_20_2.0']
+        df['BB_middle'] = bb['BBM_20_2.0']
+        df['BB_lower'] = bb['BBL_20_2.0']
     
     return df
 
@@ -108,28 +122,29 @@ def calculate_indicators(df):
 def get_trade_signals(df):
     buy_signals = []
     short_signals = []
-    
+
     # Use MACD and Bollinger Bands for buy and short signals
-    for i in range(1, len(df)):
-        if df['MACD'].iloc[i] > df['MACD_signal'].iloc[i] and df['close'].iloc[i] < df['BB_lower'].iloc[i]:
-            buy_signals.append(i)
-        elif df['MACD'].iloc[i] < df['MACD_signal'].iloc[i] and df['close'].iloc[i] > df['BB_upper'].iloc[i]:
-            short_signals.append(i)
-    
+    if 'MACD' in df.columns and 'MACD_signal' in df.columns and 'BB_lower' in df.columns and 'BB_upper' in df.columns:
+        for i in range(1, len(df)):
+            if df['MACD'].iloc[i] > df['MACD_signal'].iloc[i] and df['close'].iloc[i] < df['BB_lower'].iloc[i]:
+                buy_signals.append(i)
+            elif df['MACD'].iloc[i] < df['MACD_signal'].iloc[i] and df['close'].iloc[i] > df['BB_upper'].iloc[i]:
+                short_signals.append(i)
+
     return buy_signals, short_signals
 
 # Function to generate a summary of the stock analysis
 def generate_summary(df, symbol, buy_signals, short_signals):
     latest_close = df['close'].iloc[-1]
     latest_rsi = df['RSI'].iloc[-1]
-    latest_macd = df['MACD'].iloc[-1]
-    latest_macd_signal = df['MACD_signal'].iloc[-1]
-    bb_upper = df['BB_upper'].iloc[-1]
-    bb_lower = df['BB_lower'].iloc[-1]
+    latest_macd = df['MACD'].iloc[-1] if 'MACD' in df.columns else None
+    latest_macd_signal = df['MACD_signal'].iloc[-1] if 'MACD_signal' in df.columns else None
+    bb_upper = df['BB_upper'].iloc[-1] if 'BB_upper' in df.columns else None
+    bb_lower = df['BB_lower'].iloc[-1] if 'BB_lower' in df.columns else None
     volume = df['volume'].iloc[-1]
     
     if buy_signals:
-        target_price = df['BB_middle'].iloc[-1]
+        target_price = df['BB_middle'].iloc[-1] if 'BB_middle' in df.columns else None
         summary = f"""
         **{symbol} Stock Analysis (Buy Recommendation):**
         
@@ -148,7 +163,7 @@ def generate_summary(df, symbol, buy_signals, short_signals):
         - **Time Frame**: This movement is expected over the next 1-4 weeks.
         """
     elif short_signals:
-        target_price = df['BB_middle'].iloc[-1]
+        target_price = df['BB_middle'].iloc[-1] if 'BB_middle' in df.columns else None
         summary = f"""
         **{symbol} Stock Analysis (Short Recommendation):**
         
@@ -185,14 +200,20 @@ def generate_summary(df, symbol, buy_signals, short_signals):
 
 # Function to plot stock data with indicators
 def plot_stock(df, symbol, buy_signals, short_signals):
-    plt.figure(figsize=(6, 4))
+    plt.figure(figsize=(10, 6))
     plt.plot(df['date'], df['close'], label=f'{symbol} Close Price')
-    plt.plot(df['date'], df['MACD'], label='MACD')
-    plt.plot(df['date'], df['MACD_signal'], label='MACD Signal')
-    plt.plot(df['date'], df['RSI'], label='RSI')
-    plt.plot(df['date'], df['BB_upper'], label='Bollinger Bands Upper', linestyle='--')
-    plt.plot(df['date'], df['BB_middle'], label='Bollinger Bands Middle', linestyle='--')
-    plt.plot(df['date'], df['BB_lower'], label='Bollinger Bands Lower', linestyle='--')
+    
+    if 'MACD' in df.columns and 'MACD_signal' in df.columns:
+        plt.plot(df['date'], df['MACD'], label='MACD')
+        plt.plot(df['date'], df['MACD_signal'], label='MACD Signal')
+    
+    if 'RSI' in df.columns:
+        plt.plot(df['date'], df['RSI'], label='RSI')
+    
+    if 'BB_upper' in df.columns and 'BB_lower' in df.columns:
+        plt.plot(df['date'], df['BB_upper'], label='Bollinger Bands Upper', linestyle='--')
+        plt.plot(df['date'], df['BB_middle'], label='Bollinger Bands Middle', linestyle='--')
+        plt.plot(df['date'], df['BB_lower'], label='Bollinger Bands Lower', linestyle='--')
     
     # Mark buy signals
     for signal in buy_signals:
@@ -208,6 +229,33 @@ def plot_stock(df, symbol, buy_signals, short_signals):
     plt.legend()
     plt.grid(True)
     st.pyplot(plt)
+
+# Function to fetch news articles from Finnhub
+@st.cache_data(show_spinner=False)
+def fetch_news_from_finhub():
+    url = f'https://finnhub.io/api/v1/news?category=general&token={finhub_api_key}'
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        news_data = response.json()
+        return news_data[:5]  # Get the top 5 articles
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to fetch news: {e}")
+        return []
+
+# Function to display news articles
+def display_news(articles):
+    if articles:
+        for article in articles:
+            title = article.get('title') or 'No Title Available'
+            description = article.get('description') or 'No Description Available'
+            url = article.get('url', '#')
+            st.markdown(f"### {title}")
+            st.markdown(f"{description}")
+            st.markdown(f"[Read more]({url})")
+            st.write("---")
+    else:
+        st.write("No news articles available.")
 
 # Sidebar: Ask Theodora and Stock Price Range Selection
 st.sidebar.markdown("### **Ask Theodora**")
@@ -225,6 +273,28 @@ max_price = st.sidebar.number_input('Maximum Stock Price', value=20, min_value=0
 st.sidebar.markdown("### **Stock Ticker Search**")
 ticker_search = st.sidebar.text_input("Enter Stock Ticker", key="ticker_search")
 
+# Fetch and display market indices
+st.subheader("Market Indices")
+indices_symbols = {"Dow Jones (DIA)": "DIA", "NASDAQ (QQQ)": "QQQ", "S&P 500 (SPY)": "SPY"}
+indices_data = {}
+
+for index_name, symbol in indices_symbols.items():
+    indices_data[index_name] = fetch_market_data_batch([symbol])
+
+cols = st.columns(3)
+for i, (index_name, df) in enumerate(indices_data.items()):
+    with cols[i]:
+        if df:
+            df = pd.DataFrame(df)
+            df['date'] = pd.to_datetime(df['date'])
+            df = calculate_indicators(df)
+            st.subheader(index_name)
+            plot_stock(df, index_name, [], [])
+        else:
+            st.subheader(index_name)
+            st.write("No data available.")
+
+# Fetch and analyze stocks based on the selected price range and volume criteria
 if ticker_search:
     st.sidebar.write(f"Searching for {ticker_search.upper()}...")
     market_data = fetch_market_data_batch([ticker_search.upper()])
@@ -238,32 +308,21 @@ if ticker_search:
         summary = generate_summary(df, ticker_search.upper(), buy_signals, short_signals)
         st.markdown(summary)
 
-# Fetch and analyze stocks based on the selected price range and volume criteria
-all_tickers = fetch_stock_tickers()
-potential_stocks = filter_stocks_by_price_and_volume(all_tickers, min_price, max_price, 2000000)
+# Watchlist management
+st.sidebar.markdown("### **Watchlist**")
+watchlist = st.sidebar.multiselect("Add to Watchlist", options=fetch_stock_tickers(), format_func=lambda x: x['symbol'])
 
-# Ensure we're not sampling more stocks than are available
-num_stocks_to_sample = min(len(potential_stocks), 10)
-
-# Select random stocks for analysis based on user-defined criteria
-random_stocks = random.sample(potential_stocks, num_stocks_to_sample)
-
-st.subheader("Theodora's Picks of the Week")
-
-cols = st.columns(2)
-for i, stock in enumerate(random_stocks):
-    market_data = fetch_market_data_batch([stock])
-    if market_data:
-        df = pd.DataFrame(market_data)
-        df['date'] = pd.to_datetime(df['date'])
-        df = calculate_indicators(df)
-        buy_signals, short_signals = get_trade_signals(df)
-        with cols[i % 2]:
-            st.write(f"**{stock}** - Analysis")
-            plot_stock(df, stock, buy_signals, short_signals)
-            
-            # Generate and display the summary
-            summary = generate_summary(df, stock, buy_signals, short_signals)
+if st.sidebar.button("Refresh Watchlist Data"):
+    st.subheader("Your Watchlist")
+    for stock in watchlist:
+        market_data = fetch_market_data_batch([stock['symbol']])
+        if market_data:
+            df = pd.DataFrame(market_data)
+            df['date'] = pd.to_datetime(df['date'])
+            df = calculate_indicators(df)
+            buy_signals, short_signals = get_trade_signals(df)
+            st.write(f"**{stock['symbol']}** - Analysis")
+            plot_stock(df, stock['symbol'], buy_signals, short_signals)
+            summary = generate_summary(df, stock['symbol'], buy_signals, short_signals)
             st.markdown(summary)
-
 
